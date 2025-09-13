@@ -80,11 +80,11 @@ def price_action_agent(hist):
     if ma10 > ma30:
         target = last + atr * 2
         timeline = "Short-term"
-        return "Bullish MA", 0.3, last * 1.01, last * 1.05, target, timeline
+        return "Bullish MA", 0.5, last * 1.01, last * 1.05, target, timeline
     else:
         target = last - atr * 2
         timeline = "Short-term"
-        return "Bearish MA", 0.0, last * 0.99, last * 0.95, target, timeline
+        return "Bearish MA", 0.1, last * 0.99, last * 0.95, target, timeline
 
 def technical_agent_enhanced(hist):
     close = hist['Close']
@@ -106,8 +106,8 @@ def technical_agent_enhanced(hist):
     roll_down = down.rolling(14).mean()
     rs = roll_up / roll_down
     rsi = 100 - 100 / (1 + rs)
-    rsi_signal = 1 if rsi.iloc[-1] < 30 else -1 if rsi.iloc[-1] > 70 else 0
-    score = 0.15 + 0.1 * (macd_signal > 0) + 0.05 * (close.iloc[-1] < upper.iloc[-1]) + 0.05 * rsi_signal
+    rsi_signal = 1 if rsi.iloc[-1] < 30 else -0.5 if rsi.iloc[-1] > 70 else 0
+    score = 0.2 + 0.1 * (macd_signal > 0) + 0.05 * (close.iloc[-1] < upper.iloc[-1]) + 0.05 * rsi_signal
     score = min(max(score, 0), 1.0)
     return f"MACD={round(macd.iloc[-1], 2)}, RSI={round(rsi.iloc[-1], 1)}", score, None, None, target_price, timeline
 
@@ -119,12 +119,12 @@ def fundamental_agent_enhanced(info):
     div = info.get('dividendYield', None)
     score = 0.1
     args = []
-    if pe and pe < 25:
+    if pe and pe < 30:
         score += 0.05
         args.append(f"PE={pe}")
     elif pe:
         score -= 0.05
-    if roe and roe > 0.15:
+    if roe and roe > 0.1:
         score += 0.05
         args.append(f"ROE={round(roe, 2)}")
     elif roe:
@@ -226,14 +226,19 @@ def analyze_stock(ticker):
         # Adjust for data freshness
         now_utc = datetime.now(timezone.utc)
         data_age = (now_utc - latest_time).total_seconds() / 3600
-        freshness_factor = 0.9 if data_age > 24 else 1.0
-        final_score_normalized = min(final_score * max(0, 1 - volatility) * freshness_factor, 1.0)
+        freshness_factor = 1.0  # Temporary for debugging
+        final_score_normalized = min(final_score * max(0, 1 - 0.5 * volatility) * freshness_factor, 1.0)
         confidence_percent = round(final_score_normalized * 100, 2)
         
-        if final_score_normalized >= 0.7:
+        # Log scores for debugging
+        for agent, (arg, score, _, _, _, _) in adjusted.items():
+            print(f"{ticker} - {agent}: Score = {score}, Arg = {arg}")
+        print(f"{ticker} - Final Score: {final_score}, Volatility: {volatility}, Freshness: {freshness_factor}, Normalized: {final_score_normalized}")
+        
+        if final_score_normalized >= 0.6:
             recommendation = "Buy"
             risk_level = "High-risk"
-        elif final_score_normalized >= 0.4:
+        elif final_score_normalized >= 0.3:
             recommendation = "Hold"
             risk_level = "Medium-risk"
         else:
