@@ -71,6 +71,17 @@ def get_top_stocks_yf(tickers, n=5):
 def get_top_stocks(n=5):
     return get_top_stocks_yf(tickers_pool, n)
 
+# --- Market Trend Check ---
+@st.cache_data(ttl=3600)
+def get_market_trend(period="6mo"):
+    try:
+        nifty = yf.Ticker("^NSEI").history(period=period)
+        ma10 = nifty['Close'].rolling(10).mean().iloc[-1]
+        ma30 = nifty['Close'].rolling(30).mean().iloc[-1]
+        return 0.05 if ma10 > ma30 else -0.05
+    except:
+        return 0.0
+
 # --- Agents ---
 def price_action_agent(hist):
     ma10 = hist['Close'].rolling(10).mean().iloc[-1]
@@ -80,11 +91,11 @@ def price_action_agent(hist):
     if ma10 > ma30:
         target = last + atr * 2
         timeline = "Short-term"
-        return "Bullish MA", 0.5, last * 1.01, last * 1.05, target, timeline
+        return "Bullish MA", 0.7, last * 1.01, last * 1.05, target, timeline
     else:
         target = last - atr * 2
         timeline = "Short-term"
-        return "Bearish MA", 0.1, last * 0.99, last * 0.95, target, timeline
+        return "Bearish MA", 0.2, last * 0.99, last * 0.95, target, timeline
 
 def technical_agent_enhanced(hist):
     close = hist['Close']
@@ -107,7 +118,7 @@ def technical_agent_enhanced(hist):
     rs = roll_up / roll_down
     rsi = 100 - 100 / (1 + rs)
     rsi_signal = 1 if rsi.iloc[-1] < 30 else -0.5 if rsi.iloc[-1] > 70 else 0
-    score = 0.2 + 0.1 * (macd_signal > 0) + 0.05 * (close.iloc[-1] < upper.iloc[-1]) + 0.05 * rsi_signal
+    score = 0.25 + 0.1 * (macd_signal > 0) + 0.05 * (close.iloc[-1] < upper.iloc[-1]) + 0.05 * rsi_signal
     score = min(max(score, 0), 1.0)
     return f"MACD={round(macd.iloc[-1], 2)}, RSI={round(rsi.iloc[-1], 1)}", score, None, None, target_price, timeline
 
@@ -117,14 +128,14 @@ def fundamental_agent_enhanced(info):
     de = info.get('debtToEquity', None)
     epsg = info.get('earningsQuarterlyGrowth', None)
     div = info.get('dividendYield', None)
-    score = 0.1
+    score = 0.15
     args = []
-    if pe and pe < 30:
+    if pe and pe < 35:
         score += 0.05
         args.append(f"PE={pe}")
     elif pe:
         score -= 0.05
-    if roe and roe > 0.1:
+    if roe and roe > 0.08:
         score += 0.05
         args.append(f"ROE={round(roe, 2)}")
     elif roe:
@@ -149,7 +160,7 @@ def volume_agent(hist):
     v10 = hist['Volume'].rolling(10).mean().iloc[-1]
     v30 = hist['Volume'].rolling(30).mean().iloc[-1]
     if v10 > 1.5 * v30:
-        return "Volume spike", 0.1, None, None, None, "Short-term"
+        return "Volume spike", 0.2, None, None, None, "Short-term"
     else:
         return "Volume normal", 0.0, None, None, None, "Short-term"
 
@@ -162,10 +173,10 @@ def sentiment_agent_financial(headlines):
         scores.append(probs[1] - probs[2])  # Positive - Negative
     if scores:
         avg_score = sum(scores) / len(scores)
-        score = min(max(0.25 + avg_score * 0.25, 0), 1.0)
+        score = min(max(0.3 + avg_score * 0.3, 0), 1.0)
         return f"{len([s for s in scores if s > 0])}/{len(scores)} positive", score, None, None, None, "Short-term"
     else:
-        return "No news", 0.25, None, None, None, "Short-term"
+        return "No news", 0.3, None, None, None, "Short-term"
 
 def moderator(debate_dict):
     scores = [score for _, score, _, _, _, _ in debate_dict.values()]
@@ -222,12 +233,16 @@ def analyze_stock(ticker):
         agent_weights = [0.27, 0.23, 0.23, 0.18, 0.09]  # Sum to 1.0
         final_score = sum(w * score for w, (_, score, _, _, _, _) in zip(agent_weights, adjusted.values()))
         
+        # Adjust for market trend
+        market_trend = get_market_trend()
+        final_score += market_trend
+        
         volatility = hist['Close'].pct_change().rolling(30).std().iloc[-1]
         # Adjust for data freshness
         now_utc = datetime.now(timezone.utc)
         data_age = (now_utc - latest_time).total_seconds() / 3600
-        freshness_factor = 1.0  # Temporary for debugging
-        final_score_normalized = min(final_score * max(0, 1 - 0.5 * volatility) * freshness_factor, 1.0)
+        freshness_factor = 0.9 if data_age > 24 else 1.0
+        final_score_normalized = min(final_score * max(0, 1 - 0.3 * volatility) * freshness_factor, 1.0)
         confidence_percent = round(final_score_normalized * 100, 2)
         
         # Log scores for debugging
@@ -235,10 +250,10 @@ def analyze_stock(ticker):
             print(f"{ticker} - {agent}: Score = {score}, Arg = {arg}")
         print(f"{ticker} - Final Score: {final_score}, Volatility: {volatility}, Freshness: {freshness_factor}, Normalized: {final_score_normalized}")
         
-        if final_score_normalized >= 0.6:
+        if final_score_normalized >= 0.5:
             recommendation = "Buy"
             risk_level = "High-risk"
-        elif final_score_normalized >= 0.3:
+        elif final_score_normalized >= 0.25:
             recommendation = "Hold"
             risk_level = "Medium-risk"
         else:
@@ -280,7 +295,7 @@ def analyze_stock(ticker):
         }
 
 # --- Streamlit UI ---
-st.title("Multi-Agent Stock Recommendation System (Phase 8 Upgrade)")
+st.title("Multi-Agent Stock Recommendation System (Phase 8.1 Upgrade)")
 
 # Allow custom ticker input
 custom_ticker = st.text_input("Enter a custom ticker (e.g., RELIANCE.NS) or leave blank to analyze top stocks:")
