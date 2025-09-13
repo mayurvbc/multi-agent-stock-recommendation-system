@@ -2,7 +2,7 @@ yfinance
 streamlit
 pandas
 numpy
-matplotlib
 transformers
 torch
 scipy
+matplotlib
