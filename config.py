@@ -1,1 +1,4 @@
-tickers_pool = ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS']
+tickers_pool = [
+    'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
+    'KOTAKBANK.NS', 'LT.NS', 'SBIN.NS', 'BAJFINANCE.NS', 'AXISBANK.NS'
+]
