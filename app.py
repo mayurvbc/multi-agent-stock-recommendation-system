@@ -5,7 +5,7 @@ import numpy as np
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from scipy.special import softmax
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 # --- Load FinBERT ---
 @st.cache_resource(ttl=3600)
@@ -198,6 +198,12 @@ def analyze_stock(ticker):
         
         last_price = hist['Close'].iloc[-1]
         latest_time = hist.index[-1]
+        # Ensure latest_time is timezone-aware
+        if latest_time.tzinfo is None:
+            latest_time = latest_time.tz_localize('UTC')
+        else:
+            latest_time = latest_time.tz_convert('UTC')
+        
         debate = {}
         debate['Price Action'] = price_action_agent(hist)
         debate['Technical'] = technical_agent_enhanced(hist)
@@ -218,7 +224,8 @@ def analyze_stock(ticker):
         
         volatility = hist['Close'].pct_change().rolling(30).std().iloc[-1]
         # Adjust for data freshness
-        data_age = (datetime.now() - latest_time).total_seconds() / 3600
+        now_utc = datetime.now(timezone.utc)
+        data_age = (now_utc - latest_time).total_seconds() / 3600
         freshness_factor = 0.9 if data_age > 24 else 1.0
         final_score_normalized = min(final_score * max(0, 1 - volatility) * freshness_factor, 1.0)
         confidence_percent = round(final_score_normalized * 100, 2)
