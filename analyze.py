@@ -1,0 +1,1 @@
+# analyze_stock and analyze_stock_for_backtest functions

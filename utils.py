@@ -1,0 +1,1 @@
+# format_debate, format_entry_exit helper functions
